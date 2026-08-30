@@ -59,19 +59,27 @@ def set_bundle_id(app_path, new_id):
     if not plist_path:
         die(f"Info.plist not found in {app_path}, cannot modify.")
         
-    # Use plutil to preserve binary plist format
+    # Convert the plist to clean XML text first so it doesn't look like gibberish
+    subprocess.run(
+        ["plutil", "-convert", "xml1", plist_path],
+        capture_output=True
+    )
+        
+    # Now replace the value using plutil
     r = subprocess.run(
         ["plutil", "-replace", "CFBundleIdentifier", "string", new_id, plist_path],
         capture_output=True, text=True,
     )
+    
+    # If plutil fails for some reason, fallback to Python's plistlib
     if r.returncode != 0:
-        # Fallback to plistlib (writes binary plist)
         try:
             with open(plist_path, "rb") as f:
                 data = plistlib.load(f)
             data["CFBundleIdentifier"] = new_id
+            # Save as XML (FMT_XML) so it remains readable text
             with open(plist_path, "wb") as f:
-                plistlib.dump(data, f, fmt=plistlib.FMT_BINARY)
+                plistlib.dump(data, f, fmt=plistlib.FMT_XML)
         except Exception as e:
             die(f"failed to set CFBundleIdentifier: {e}")
 
@@ -166,7 +174,7 @@ def main():
     set_bundle_id(args.app, new_id)
 
     print("[*] ad-hoc resigning...")
-    resign(args.app, entitlements=ents)
+    resign(app_path, entitlements=ents)
 
     print(f"[+] done. {args.app} now reports bundle id: {new_id}")
 
