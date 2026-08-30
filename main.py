@@ -20,16 +20,33 @@ def die(msg, code=1):
     sys.exit(code)
 
 
+def get_info_plist_path(app_path):
+    """Find Info.plist whether it's in Contents/ or the root of the .app."""
+    # Standard macOS bundle structure
+    standard_path = os.path.join(app_path, "Contents", "Info.plist")
+    if os.path.isfile(standard_path):
+        return standard_path
+    
+    # Flat bundle structure (some basic apps)
+    flat_path = os.path.join(app_path, "Info.plist")
+    if os.path.isfile(flat_path):
+        return flat_path
+        
+    return None
+
+
 def get_bundle_id(app_path):
-    """Read CFBundleIdentifier from <app>/Info.plist."""
-    plist_path = os.path.join(app_path, "Info.plist")
-    if not os.path.isfile(plist_path):
-        die(f"Info.plist not found in {app_path}")
+    """Read CFBundleIdentifier from the app's Info.plist."""
+    plist_path = get_info_plist_path(app_path)
+    if not plist_path:
+        die(f"Info.plist not found in {app_path} (checked / and /Contents/)")
+    
     try:
         with open(plist_path, "rb") as f:
             data = plistlib.load(f)
     except Exception as e:
         die(f"failed to read {plist_path}: {e}")
+        
     bid = data.get("CFBundleIdentifier")
     if not bid:
         die(f"CFBundleIdentifier not found in {plist_path}")
@@ -37,14 +54,18 @@ def get_bundle_id(app_path):
 
 
 def set_bundle_id(app_path, new_id):
-    """Replace CFBundleIdentifier in <app>/Info.plist (preserves plist format)."""
-    plist_path = os.path.join(app_path, "Info.plist")
+    """Replace CFBundleIdentifier in the app's Info.plist."""
+    plist_path = get_info_plist_path(app_path)
+    if not plist_path:
+        die(f"Info.plist not found in {app_path}, cannot modify.")
+        
+    # Use plutil to preserve binary plist format
     r = subprocess.run(
         ["plutil", "-replace", "CFBundleIdentifier", "string", new_id, plist_path],
         capture_output=True, text=True,
     )
     if r.returncode != 0:
-        # Fallback: plistlib (will write binary plist)
+        # Fallback to plistlib (writes binary plist)
         try:
             with open(plist_path, "rb") as f:
                 data = plistlib.load(f)
@@ -60,6 +81,12 @@ def strip_signatures(app_path):
     sig = os.path.join(app_path, "_CodeSignature")
     if os.path.isdir(sig):
         shutil.rmtree(sig, ignore_errors=True)
+        
+    # Also check the Contents directory just to be thorough
+    sig_contents = os.path.join(app_path, "Contents", "_CodeSignature")
+    if os.path.isdir(sig_contents):
+        shutil.rmtree(sig_contents, ignore_errors=True)
+        
     for root, dirs, _ in os.walk(app_path):
         for d in list(dirs):
             if d == "_CodeSignature":
