@@ -174,7 +174,7 @@ def main():
     set_bundle_id(args.app, new_id)
 
     print("[*] ad-hoc resigning...")
-    resign(app_path, entitlements=ents)
+    resign(args.app, entitlements=ents)
 
     print(f"[+] done. {args.app} now reports bundle id: {new_id}")
 
