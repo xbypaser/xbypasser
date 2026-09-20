@@ -24,6 +24,8 @@ Usage:
 """
 import argparse
 import os
+import ctypes
+import ctypes.util
 import plistlib
 import shutil
 import subprocess
